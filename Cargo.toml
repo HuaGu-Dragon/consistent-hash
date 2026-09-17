@@ -1,0 +1,8 @@
+[package]
+name = "consistent-hash"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+siphasher = "1.0.3"
+slab = "0.4.12"
