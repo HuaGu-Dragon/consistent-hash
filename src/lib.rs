@@ -1,19 +1,19 @@
 use std::{
     borrow::Borrow,
-    collections::BTreeMap,
     hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
     marker::PhantomData,
 };
 
-mod error;
-
 use siphasher::sip128::SipHasher13;
-use slab::Slab;
+
+use crate::inner::Inner;
+
+mod error;
+mod inner;
 
 pub struct ConsistentHash<K, N, S = BuildHasherDefault<SipHasher13>, const R: usize = 4> {
     build_hash: S,
-    ring: BTreeMap<u64, usize>,
-    nodes: Slab<N>,
+    inner: Inner<N>,
     _marker: PhantomData<fn() -> K>,
 }
 
@@ -21,18 +21,17 @@ impl<K, N, S, const R: usize> ConsistentHash<K, N, S, R> {
     fn with_hasher(build_hash: S) -> Self {
         Self {
             build_hash,
-            ring: Default::default(),
-            nodes: Default::default(),
+            inner: Default::default(),
             _marker: PhantomData,
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        self.inner.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.ring.len()
+        self.inner.len()
     }
 }
 
@@ -54,29 +53,64 @@ where
         hasher.finish()
     }
 
-    pub fn insert<Q>(&mut self, k: &Q, node: N) -> Result<&mut N, error::Error<N>>
+    fn vnodes_hash<Q>(&self, k: &Q) -> Option<[u64; R]>
     where
         K: Borrow<Q>,
         Q: Hash + ?Sized,
     {
         let mut hashes = [0u64; R];
         for (idx, hash) in hashes.iter_mut().enumerate() {
-            let h = self.vnode_hash(k, idx);
-
-            if self.ring.contains_key(&h) {
-                return Err(error::Error::Collisions(h, node));
-            }
-
-            *hash = h;
+            *hash = self.vnode_hash(k, idx);
         }
 
-        let token = self.nodes.insert(node);
-
-        for hash in hashes {
-            self.ring.insert(hash, token);
+        hashes.sort_unstable();
+        if hashes.array_windows().any(|[prev, next]| prev == next) {
+            return None;
         }
 
-        Ok(&mut self.nodes[token])
+        Some(hashes)
+    }
+
+    fn nearest_node_index(&self, hash: u64) -> Option<(&u64, &usize)> {
+        self.inner
+            .ring
+            .range(hash..)
+            .next()
+            .or_else(|| self.inner.ring.first_key_value())
+    }
+
+    pub fn search_nearest(&self, hash: u64) -> Option<(u64, &N)> {
+        let (&hash, &token) = self.nearest_node_index(hash)?;
+
+        Some((hash, &self.inner.nodes[token]))
+    }
+
+    pub fn search_nearest_mut(&mut self, hash: u64) -> Option<(u64, &mut N)> {
+        let (&hash, &token) = self.nearest_node_index(hash)?;
+
+        Some((hash, &mut self.inner.nodes[token]))
+    }
+}
+
+impl<K, N, S, const R: usize> ConsistentHash<K, N, S, R>
+where
+    N: Clone,
+    K: Hash,
+    S: BuildHasher,
+{
+    pub fn insert<Q>(&mut self, k: &Q, node: N) -> Result<&mut N, error::Error<N>>
+    where
+        K: Borrow<Q>,
+        Q: Hash + ?Sized,
+    {
+        let Some(hashes) = self.vnodes_hash(k) else {
+            return Err(error::Error::VnodeHashCollision(node));
+        };
+
+        let (new_state, token) = self.inner.clone().insert_with(&hashes, node)?;
+        self.inner = new_state;
+
+        Ok(&mut self.inner.nodes[token])
     }
 
     pub fn remove<Q>(&mut self, k: &Q) -> Option<N>
@@ -84,52 +118,12 @@ where
         K: Borrow<Q>,
         Q: Hash + ?Sized,
     {
-        let mut hashes = [0u64; R];
-        for (idx, slot) in hashes.iter_mut().enumerate() {
-            let h = self.vnode_hash(k, idx);
+        let hashes = self.vnodes_hash(k)?;
 
-            if self.ring.contains_key(&h) {
-                *slot = h;
-            } else {
-                return None;
-            }
-        }
+        let (new_state, node) = self.inner.clone().remove_with(&hashes)?;
+        self.inner = new_state;
 
-        let mut token = None;
-        for hash in hashes {
-            let Some(slot) = self.ring.remove(&hash) else {
-                unreachable!("")
-            };
-
-            match token {
-                Some(token) => assert_eq!(token, slot),
-                None => token = Some(slot),
-            }
-        }
-
-        Some(
-            self.nodes
-                .remove(token.expect("there must have at least one node")),
-        )
-    }
-
-    fn nearest_node_index(&self, hash: u64) -> Option<(&u64, &usize)> {
-        self.ring
-            .range(hash..)
-            .next()
-            .or_else(|| self.ring.first_key_value())
-    }
-
-    pub fn search_nearest(&self, hash: u64) -> Option<(u64, &N)> {
-        let (&hash, &token) = self.nearest_node_index(hash)?;
-
-        Some((hash, &self.nodes[token]))
-    }
-
-    pub fn search_nearest_mut(&mut self, hash: u64) -> Option<(u64, &mut N)> {
-        let (&hash, &token) = self.nearest_node_index(hash)?;
-
-        Some((hash, &mut self.nodes[token]))
+        Some(node)
     }
 }
 
@@ -190,6 +184,7 @@ mod tests {
 
         ring.remove(&1);
         assert_eq!(ring.len(), 8);
+
         ring.remove(&50);
         assert_eq!(ring.len(), 4);
     }
