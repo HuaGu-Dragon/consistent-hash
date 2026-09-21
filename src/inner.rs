@@ -12,6 +12,13 @@ pub(crate) struct Inner<N> {
 }
 
 impl<N> Inner<N> {
+    pub(crate) fn nearest_node_index(&self, hash: u64) -> Option<(&u64, &usize)> {
+        self.ring
+            .range(hash..)
+            .next()
+            .or_else(|| self.ring.first_key_value())
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.ring.is_empty()
     }

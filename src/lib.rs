@@ -2,18 +2,21 @@ use std::{
     borrow::Borrow,
     hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
     marker::PhantomData,
+    ptr,
 };
 
+use arc_swap::{ArcSwap, AsRaw};
 use siphasher::sip128::SipHasher13;
 
-use crate::inner::Inner;
+use crate::{inner::Inner, snapshot::NodeRef};
 
 mod error;
 mod inner;
+mod snapshot;
 
 pub struct ConsistentHash<K, N, S = BuildHasherDefault<SipHasher13>, const R: usize = 4> {
     build_hash: S,
-    inner: Inner<N>,
+    inner: ArcSwap<Inner<N>>,
     _marker: PhantomData<fn() -> K>,
 }
 
@@ -27,11 +30,11 @@ impl<K, N, S, const R: usize> ConsistentHash<K, N, S, R> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
+        self.inner.load().is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.inner.len()
+        self.inner.load().len()
     }
 }
 
@@ -71,24 +74,17 @@ where
         Some(hashes)
     }
 
-    fn nearest_node_index(&self, hash: u64) -> Option<(&u64, &usize)> {
-        self.inner
-            .ring
-            .range(hash..)
-            .next()
-            .or_else(|| self.inner.ring.first_key_value())
-    }
+    pub fn search_nearest(&self, hash: u64) -> Option<(u64, NodeRef<N>)> {
+        let inner = self.inner.load_full();
 
-    pub fn search_nearest(&self, hash: u64) -> Option<(u64, &N)> {
-        let (&hash, &token) = self.nearest_node_index(hash)?;
+        let (&hash, &token) = inner.nearest_node_index(hash)?;
+        let node = &raw const inner.nodes[token];
+        let node = NodeRef {
+            _snapshot: inner,
+            node,
+        };
 
-        Some((hash, &self.inner.nodes[token]))
-    }
-
-    pub fn search_nearest_mut(&mut self, hash: u64) -> Option<(u64, &mut N)> {
-        let (&hash, &token) = self.nearest_node_index(hash)?;
-
-        Some((hash, &mut self.inner.nodes[token]))
+        Some((hash, node))
     }
 }
 
@@ -98,7 +94,7 @@ where
     K: Hash,
     S: BuildHasher,
 {
-    pub fn insert<Q>(&mut self, k: &Q, node: N) -> Result<&mut N, error::Error<N>>
+    pub fn insert<Q>(&self, k: &Q, node: N) -> Result<(), error::Error<N>>
     where
         K: Borrow<Q>,
         Q: Hash + ?Sized,
@@ -107,21 +103,43 @@ where
             return Err(error::Error::VnodeHashCollision(node));
         };
 
-        let (new_state, token) = self.inner.clone().insert_with(&hashes, node)?;
-        self.inner = new_state;
+        let mut cur = self.inner.load();
+        loop {
+            let new = Inner::clone(&cur);
+            let (new, _) = new.insert_with(&hashes, node.clone())?;
 
-        Ok(&mut self.inner.nodes[token])
+            let prev = self.inner.compare_and_swap(&*cur, new.into());
+            let swapped = ptr_eq(&*cur, &*prev);
+            if swapped {
+                break;
+            } else {
+                cur = prev;
+            }
+        }
+
+        Ok(())
     }
 
-    pub fn remove<Q>(&mut self, k: &Q) -> Option<N>
+    pub fn remove<Q>(&self, k: &Q) -> Option<N>
     where
         K: Borrow<Q>,
         Q: Hash + ?Sized,
     {
         let hashes = self.vnodes_hash(k)?;
 
-        let (new_state, node) = self.inner.clone().remove_with(&hashes)?;
-        self.inner = new_state;
+        let mut cur = self.inner.load();
+        let node = loop {
+            let new = Inner::clone(&cur);
+            let (new, node) = new.remove_with(&hashes)?;
+
+            let prev = self.inner.compare_and_swap(&*cur, new.into());
+            let swapped = ptr_eq(&*cur, &*prev);
+            if swapped {
+                break node;
+            } else {
+                cur = prev;
+            }
+        };
 
         Some(node)
     }
@@ -131,6 +149,16 @@ impl<K, V, S: Default, const R: usize> Default for ConsistentHash<K, V, S, R> {
     fn default() -> Self {
         Self::with_hasher(Default::default())
     }
+}
+
+fn ptr_eq<Base, A, B>(a: A, b: B) -> bool
+where
+    A: AsRaw<Base>,
+    B: AsRaw<Base>,
+{
+    let a = a.as_raw();
+    let b = b.as_raw();
+    ptr::eq(a, b)
 }
 
 #[cfg(test)]
@@ -156,23 +184,43 @@ mod tests {
             }
         }
 
-        let mut ring: ConsistentHash<i32, i32, BuildHasherDefault<Hash>, 1> =
+        let ring: ConsistentHash<i32, i32, BuildHasherDefault<Hash>, 1> =
             ConsistentHash::with_hasher(BuildHasherDefault::<Hash>::new());
 
         ring.insert(&1, 1).unwrap();
         ring.insert(&50, 50).unwrap();
         ring.insert(&100, 100).unwrap();
 
-        assert_eq!(ring.search_nearest(0), Some((1, &1)));
-        assert_eq!(ring.search_nearest(50), Some((50, &50)));
-        assert_eq!(ring.search_nearest(100), Some((100, &100)));
-        assert_eq!(ring.search_nearest(80), Some((100, &100)));
-        assert_eq!(ring.search_nearest(150), Some((1, &1)));
+        assert_eq!(
+            ring.search_nearest(0)
+                .map(|(hash, node_ref)| (hash, *node_ref)),
+            Some((1, 1))
+        );
+        assert_eq!(
+            ring.search_nearest(50)
+                .map(|(hash, node_ref)| (hash, *node_ref)),
+            Some((50, 50))
+        );
+        assert_eq!(
+            ring.search_nearest(100)
+                .map(|(hash, node_ref)| (hash, *node_ref)),
+            Some((100, 100))
+        );
+        assert_eq!(
+            ring.search_nearest(80)
+                .map(|(hash, node_ref)| (hash, *node_ref)),
+            Some((100, 100))
+        );
+        assert_eq!(
+            ring.search_nearest(150)
+                .map(|(hash, node_ref)| (hash, *node_ref)),
+            Some((1, 1))
+        );
     }
 
     #[test]
     fn test_replicate() {
-        let mut ring: ConsistentHash<i32, i32, BuildHasherDefault<SipHasher13>, 4> =
+        let ring: ConsistentHash<i32, i32, BuildHasherDefault<SipHasher13>, 4> =
             ConsistentHash::with_hasher(BuildHasherDefault::<SipHasher13>::new());
 
         assert!(ring.is_empty());
