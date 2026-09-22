@@ -3,6 +3,7 @@ use std::{
     hash::{BuildHasher, BuildHasherDefault, Hash, Hasher},
     marker::PhantomData,
     ptr,
+    sync::Arc,
 };
 
 use arc_swap::{ArcSwap, AsRaw};
@@ -76,15 +77,9 @@ where
 
     pub fn search_nearest(&self, hash: u64) -> Option<(u64, NodeRef<N>)> {
         let inner = self.inner.load_full();
-
         let (&hash, &token) = inner.nearest_node_index(hash)?;
-        let node = &raw const inner.nodes[token];
-        let node = NodeRef {
-            _snapshot: inner,
-            node,
-        };
 
-        Some((hash, node))
+        Some((hash, NodeRef::new(inner, token)))
     }
 }
 
@@ -94,7 +89,7 @@ where
     K: Hash,
     S: BuildHasher,
 {
-    pub fn insert<Q>(&self, k: &Q, node: N) -> Result<(), error::Error<N>>
+    pub fn insert<Q>(&self, k: &Q, node: N) -> Result<NodeRef<N>, error::Error<N>>
     where
         K: Borrow<Q>,
         Q: Hash + ?Sized,
@@ -104,20 +99,21 @@ where
         };
 
         let mut cur = self.inner.load();
-        loop {
+        let node = loop {
             let new = Inner::clone(&cur);
-            let (new, _) = new.insert_with(&hashes, node.clone())?;
+            let (new, token) = new.insert_with(&hashes, node.clone())?;
+            let inner = Arc::new(new);
 
-            let prev = self.inner.compare_and_swap(&*cur, new.into());
+            let prev = self.inner.compare_and_swap(&*cur, inner.clone());
             let swapped = ptr_eq(&*cur, &*prev);
             if swapped {
-                break;
+                break NodeRef::new(inner, token);
             } else {
                 cur = prev;
             }
-        }
+        };
 
-        Ok(())
+        Ok(node)
     }
 
     pub fn remove<Q>(&self, k: &Q) -> Option<N>
