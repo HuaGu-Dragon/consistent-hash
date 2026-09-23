@@ -9,6 +9,7 @@ pub(crate) struct Inner<N> {
 }
 
 impl<N> Inner<N> {
+    // TODO: since hash is `sorted`, we can do better
     fn contains_key(&self, hash: &u64) -> bool {
         self.ring.binary_search_by_key(hash, |bin| bin.0).is_ok()
     }
@@ -41,6 +42,7 @@ where
         node: N,
     ) -> Result<(Self, usize), error::Error<N>> {
         for hash in hashes.iter() {
+            // TODO: since hash is `sorted`, we can do better
             if self.contains_key(hash) {
                 return Err(error::Error::AlreadyExists(*hash, node));
             }
@@ -64,6 +66,7 @@ where
 
     pub(crate) fn remove_with(mut self, hashes: &[u64]) -> Option<(Self, N)> {
         for hash in hashes.iter() {
+            // TODO: since hash is `sorted`, we can do better
             if !self.contains_key(hash) {
                 return None;
             }
