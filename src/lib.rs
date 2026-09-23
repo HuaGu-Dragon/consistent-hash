@@ -77,7 +77,7 @@ where
 
     pub fn search_nearest(&self, hash: u64) -> Option<(u64, NodeRef<N>)> {
         let inner = self.inner.load_full();
-        let (&hash, &token) = inner.nearest_node_index(hash)?;
+        let &(hash, token) = inner.nearest_node_index(hash)?;
 
         Some((hash, NodeRef::new(inner, token)))
     }
@@ -98,6 +98,7 @@ where
             return Err(error::Error::VnodeHashCollision(node));
         };
 
+        // TODO: https://github.com/vorner/arc-swap/pull/212
         let mut cur = self.inner.load();
         let node = loop {
             let new = Inner::clone(&cur);
@@ -123,6 +124,7 @@ where
     {
         let hashes = self.vnodes_hash(k)?;
 
+        // TODO: https://github.com/vorner/arc-swap/pull/212
         let mut cur = self.inner.load();
         let node = loop {
             let new = Inner::clone(&cur);
@@ -139,6 +141,13 @@ where
 
         Some(node)
     }
+
+    pub fn search_nearest_cloned(&self, hash: u64) -> Option<(u64, N)> {
+        let inner = self.inner.load_full();
+        let &(hash, token) = inner.nearest_node_index(hash)?;
+
+        Some((hash, inner.nodes[token].clone()))
+    }
 }
 
 impl<K, V, S: Default, const R: usize> Default for ConsistentHash<K, V, S, R> {
@@ -147,6 +156,7 @@ impl<K, V, S: Default, const R: usize> Default for ConsistentHash<K, V, S, R> {
     }
 }
 
+// TODO: https://github.com/vorner/arc-swap/pull/212
 fn ptr_eq<Base, A, B>(a: A, b: B) -> bool
 where
     A: AsRaw<Base>,

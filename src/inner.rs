@@ -1,22 +1,25 @@
-use std::collections::BTreeMap;
-
 use slab::Slab;
 
 use crate::error;
 
 #[derive(Clone)]
 pub(crate) struct Inner<N> {
-    // TODO: replace with Box<[u64, usize]>
-    pub(crate) ring: BTreeMap<u64, usize>,
+    pub(crate) ring: Box<[(u64, usize)]>,
     pub(crate) nodes: Slab<N>,
 }
 
 impl<N> Inner<N> {
-    pub(crate) fn nearest_node_index(&self, hash: u64) -> Option<(&u64, &usize)> {
-        self.ring
-            .range(hash..)
-            .next()
-            .or_else(|| self.ring.first_key_value())
+    fn contains_key(&self, hash: &u64) -> bool {
+        self.ring.binary_search_by_key(hash, |bin| bin.0).is_ok()
+    }
+
+    pub(crate) fn nearest_node_index(&self, hash: u64) -> Option<&(u64, usize)> {
+        let idx = match self.ring.binary_search_by_key(&hash, |bin| bin.0) {
+            Err(n) if n == self.ring.len() => 0,
+            Ok(n) | Err(n) => n,
+        };
+
+        self.ring.get(idx)
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -38,19 +41,21 @@ where
         node: N,
     ) -> Result<(Self, usize), error::Error<N>> {
         for hash in hashes.iter() {
-            if self.ring.contains_key(hash) {
+            if self.contains_key(hash) {
                 return Err(error::Error::AlreadyExists(*hash, node));
             }
         }
 
         let token = self.nodes.insert(node);
 
-        self.ring
-            .extend(hashes.iter().copied().zip(std::iter::repeat(token)));
+        let mut ring = self.ring.into_vec();
+        ring.extend(hashes.iter().copied().zip(std::iter::repeat(token)));
+
+        ring.sort_unstable_by_key(|bin| bin.0);
 
         Ok((
             Self {
-                ring: self.ring,
+                ring: ring.into_boxed_slice(),
                 nodes: self.nodes,
             },
             token,
@@ -59,22 +64,24 @@ where
 
     pub(crate) fn remove_with(mut self, hashes: &[u64]) -> Option<(Self, N)> {
         for hash in hashes.iter() {
-            if !self.ring.contains_key(hash) {
+            if !self.contains_key(hash) {
                 return None;
             }
         }
 
         let mut token = None;
-        for hash in hashes {
-            let Some(slot) = self.ring.remove(hash) else {
-                unreachable!("")
-            };
-
-            match token {
-                Some(token) => assert_eq!(token, slot),
-                None => token = Some(slot),
+        let mut ring = self.ring.into_vec();
+        ring.retain(|bin| {
+            if hashes.contains(&bin.0) {
+                match token {
+                    Some(token) => assert_eq!(token, bin.1),
+                    None => token = Some(bin.1),
+                }
+                false
+            } else {
+                true
             }
-        }
+        });
 
         let node = self
             .nodes
@@ -82,7 +89,7 @@ where
 
         Some((
             Self {
-                ring: self.ring,
+                ring: ring.into_boxed_slice(),
                 nodes: self.nodes,
             },
             node,
