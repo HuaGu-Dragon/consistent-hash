@@ -27,8 +27,12 @@ impl<N> Inner<N> {
         self.ring.is_empty()
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub(crate) fn virtual_nodes_len(&self) -> usize {
         self.ring.len()
+    }
+
+    pub(crate) fn nodes_len(&self) -> usize {
+        self.nodes.len()
     }
 }
 

@@ -34,8 +34,12 @@ impl<K, N, S, const R: usize> ConsistentHash<K, N, S, R> {
         self.inner.load().is_empty()
     }
 
-    pub fn len(&self) -> usize {
-        self.inner.load().len()
+    pub fn virtual_nodes_len(&self) -> usize {
+        self.inner.load().virtual_nodes_len()
+    }
+
+    pub fn nodes_len(&self) -> usize {
+        self.inner.load().nodes_len()
     }
 }
 
@@ -234,12 +238,12 @@ mod tests {
         ring.insert(&50, 50).unwrap();
         ring.insert(&100, 100).unwrap();
 
-        assert_eq!(ring.len(), 12);
+        assert_eq!(ring.virtual_nodes_len(), 12);
 
         ring.remove(&1);
-        assert_eq!(ring.len(), 8);
+        assert_eq!(ring.virtual_nodes_len(), 8);
 
         ring.remove(&50);
-        assert_eq!(ring.len(), 4);
+        assert_eq!(ring.virtual_nodes_len(), 4);
     }
 }
