@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use slab::Slab;
 
 use crate::error;
@@ -9,11 +11,25 @@ pub(crate) struct Inner<N> {
 }
 
 impl<N> Inner<N> {
-    // TODO: since hash is `sorted`, we can do better
     fn contains_key(&self, hash: &u64) -> bool {
         self.ring.binary_search_by_key(hash, |bin| bin.0).is_ok()
     }
 
+    /// requires `hash` to be sorted
+    fn contains_keys(&self, hash: &[u64]) -> Option<u64> {
+        let mut r = 0;
+        let mut h = 0;
+
+        while r < self.ring.len() && h < hash.len() {
+            match self.ring[r].0.cmp(&hash[h]) {
+                Ordering::Less => r += 1,
+                Ordering::Greater => h += 1,
+                Ordering::Equal => return Some(hash[h]),
+            }
+        }
+
+        None
+    }
     pub(crate) fn nearest_node_index(&self, hash: u64) -> Option<&(u64, usize)> {
         let idx = match self.ring.binary_search_by_key(&hash, |bin| bin.0) {
             Err(n) if n == self.ring.len() => 0,
@@ -45,11 +61,8 @@ where
         hashes: &[u64],
         node: N,
     ) -> Result<(Self, usize), error::Error<N>> {
-        for hash in hashes.iter() {
-            // TODO: since hash is `sorted`, we can do better
-            if self.contains_key(hash) {
-                return Err(error::Error::AlreadyExists(*hash, node));
-            }
+        if let Some(hash) = self.contains_keys(hashes) {
+            return Err(error::Error::AlreadyExists(hash, node));
         }
 
         let token = self.nodes.insert(node);
