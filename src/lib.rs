@@ -30,6 +30,10 @@ impl<K, N, S, const R: usize> ConsistentHash<K, N, S, R> {
         }
     }
 
+    pub fn contains_key(&self, hash: &u64) -> bool {
+        self.inner.load().contains_key(hash)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.inner.load().is_empty()
     }

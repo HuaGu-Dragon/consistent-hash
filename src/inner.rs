@@ -11,7 +11,7 @@ pub(crate) struct Inner<N> {
 }
 
 impl<N> Inner<N> {
-    fn contains_key(&self, hash: &u64) -> bool {
+    pub fn contains_key(&self, hash: &u64) -> bool {
         self.ring.binary_search_by_key(hash, |bin| bin.0).is_ok()
     }
 
