@@ -16,20 +16,40 @@ impl<N> Inner<N> {
     }
 
     /// requires `hash` to be sorted
-    fn contains_keys(&self, hash: &[u64]) -> Option<u64> {
+    fn contains_keys(&self, hashes: &[u64]) -> Option<u64> {
         let mut r = 0;
         let mut h = 0;
 
-        while r < self.ring.len() && h < hash.len() {
-            match self.ring[r].0.cmp(&hash[h]) {
+        while r < self.ring.len() && h < hashes.len() {
+            match self.ring[r].0.cmp(&hashes[h]) {
                 Ordering::Less => r += 1,
                 Ordering::Greater => h += 1,
-                Ordering::Equal => return Some(hash[h]),
+                Ordering::Equal => return Some(hashes[h]),
             }
         }
 
         None
     }
+
+    /// requires `hash` to be sorted
+    fn contains_all_keys(&self, hashes: &[u64]) -> bool {
+        let mut r = 0;
+        let mut h = 0;
+
+        while r < self.ring.len() && h < hashes.len() {
+            match self.ring[r].0.cmp(&hashes[h]) {
+                Ordering::Less => r += 1,
+                Ordering::Greater => return false,
+                Ordering::Equal => {
+                    r += 1;
+                    h += 1;
+                }
+            }
+        }
+
+        h == hashes.len()
+    }
+
     pub(crate) fn nearest_node_index(&self, hash: u64) -> Option<&(u64, usize)> {
         let idx = match self.ring.binary_search_by_key(&hash, |bin| bin.0) {
             Err(n) if n == self.ring.len() => 0,
@@ -82,11 +102,8 @@ where
     }
 
     pub(crate) fn remove_with(mut self, hashes: &[u64]) -> Option<(Self, N)> {
-        for hash in hashes.iter() {
-            // TODO: since hash is `sorted`, we can do better
-            if !self.contains_key(hash) {
-                return None;
-            }
+        if !self.contains_all_keys(hashes) {
+            return None;
         }
 
         let mut token = None;
