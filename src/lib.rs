@@ -242,12 +242,19 @@ mod tests {
         ring.insert(&50, 50).unwrap();
         ring.insert(&100, 100).unwrap();
 
+        assert_eq!(ring.nodes_len(), 3);
         assert_eq!(ring.virtual_nodes_len(), 12);
 
         ring.remove(&1);
+        assert_eq!(ring.nodes_len(), 2);
         assert_eq!(ring.virtual_nodes_len(), 8);
 
         ring.remove(&50);
+        assert_eq!(ring.nodes_len(), 1);
         assert_eq!(ring.virtual_nodes_len(), 4);
+
+        ring.remove(&100);
+        assert_eq!(ring.nodes_len(), 0);
+        assert_eq!(ring.virtual_nodes_len(), 0);
     }
 }
