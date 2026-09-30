@@ -83,6 +83,13 @@ where
         Some(hashes)
     }
 
+    pub fn get_node(&self, hash: u64) -> Option<NodeRef<N>> {
+        let inner = self.inner.load_full();
+        let &(_, token) = inner.get_node(hash)?;
+
+        Some(NodeRef::new(inner, token))
+    }
+
     pub fn search_nearest(&self, hash: u64) -> Option<(u64, NodeRef<N>)> {
         let inner = self.inner.load_full();
         let &(hash, token) = inner.nearest_node_index(hash)?;
@@ -148,6 +155,13 @@ where
         };
 
         Some(node)
+    }
+
+    pub fn get_node_cloned(&self, hash: u64) -> Option<N> {
+        let inner = self.inner.load_full();
+        let &(_, token) = inner.get_node(hash)?;
+
+        Some(inner.nodes[token].clone())
     }
 
     pub fn search_nearest_cloned(&self, hash: u64) -> Option<(u64, N)> {

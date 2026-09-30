@@ -50,6 +50,12 @@ impl<N> Inner<N> {
         h == hashes.len()
     }
 
+    pub(crate) fn get_node(&self, hash: u64) -> Option<&(u64, usize)> {
+        let idx = self.ring.binary_search_by_key(&hash, |bin| bin.0).ok()?;
+
+        self.ring.get(idx)
+    }
+
     pub(crate) fn nearest_node_index(&self, hash: u64) -> Option<&(u64, usize)> {
         let idx = match self.ring.binary_search_by_key(&hash, |bin| bin.0) {
             Err(n) if n == self.ring.len() => 0,
