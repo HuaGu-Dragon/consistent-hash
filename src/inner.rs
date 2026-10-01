@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, ops::Index};
 
 use slab::Slab;
 
@@ -7,7 +7,7 @@ use crate::error;
 #[derive(Clone)]
 pub(crate) struct Inner<N> {
     pub(crate) ring: Box<[(u64, usize)]>,
-    pub(crate) nodes: Slab<N>,
+    nodes: Slab<N>,
 }
 
 impl<N> Inner<N> {
@@ -146,5 +146,13 @@ impl<N> Default for Inner<N> {
             ring: Default::default(),
             nodes: Default::default(),
         }
+    }
+}
+
+impl<N> Index<usize> for Inner<N> {
+    type Output = N;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.nodes.index(index)
     }
 }

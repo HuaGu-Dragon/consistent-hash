@@ -21,7 +21,7 @@ impl<N> Deref for NodeRef<N> {
 
 impl<N> NodeRef<N> {
     pub(crate) fn new(snapshot: Arc<Inner<N>>, token: usize) -> Self {
-        let node = &raw const snapshot.nodes[token];
+        let node = &raw const snapshot[token];
 
         Self {
             _snapshot: snapshot,

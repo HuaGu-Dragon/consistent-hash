@@ -161,14 +161,14 @@ where
         let inner = self.inner.load_full();
         let &(_, token) = inner.get_node(hash)?;
 
-        Some(inner.nodes[token].clone())
+        Some(inner[token].clone())
     }
 
     pub fn search_nearest_cloned(&self, hash: u64) -> Option<(u64, N)> {
         let inner = self.inner.load_full();
         let &(hash, token) = inner.nearest_node_index(hash)?;
 
-        Some((hash, inner.nodes[token].clone()))
+        Some((hash, inner[token].clone()))
     }
 }
 
