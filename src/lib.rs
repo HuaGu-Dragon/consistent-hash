@@ -9,10 +9,11 @@ use std::{
 use arc_swap::{ArcSwap, AsRaw};
 use siphasher::sip128::SipHasher13;
 
-use crate::{inner::Inner, snapshot::NodeRef};
+use crate::{inner::Inner, iter::Iter, snapshot::NodeRef};
 
 mod error;
 mod inner;
+mod iter;
 mod snapshot;
 
 pub struct ConsistentHash<K, N, S = BuildHasherDefault<SipHasher13>, const R: usize = 4> {
@@ -170,11 +171,36 @@ where
 
         Some((hash, inner[token].clone()))
     }
+
+    pub fn iter(&self) -> Iter<'_, K, N, S, R> {
+        Iter {
+            inner: self,
+            hash: 0,
+        }
+    }
 }
 
 impl<K, V, S: Default, const R: usize> Default for ConsistentHash<K, V, S, R> {
     fn default() -> Self {
         Self::with_hasher(Default::default())
+    }
+}
+
+impl<'a, K, N, S, const R: usize> IntoIterator for &'a ConsistentHash<K, N, S, R>
+where
+    N: Clone,
+    K: Hash,
+    S: BuildHasher,
+{
+    type Item = NodeRef<N>;
+
+    type IntoIter = Iter<'a, K, N, S, R>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Iter {
+            inner: self,
+            hash: 0,
+        }
     }
 }
 
