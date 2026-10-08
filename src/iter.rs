@@ -10,7 +10,6 @@ pub struct Iter<'a, K, N, S, const R: usize> {
 
 impl<'a, K, N, S, const R: usize> Iterator for Iter<'a, K, N, S, R>
 where
-    N: Clone,
     K: Hash,
     S: BuildHasher,
 {
@@ -29,7 +28,6 @@ where
 
 impl<'a, K, N, S, const R: usize> DoubleEndedIterator for Iter<'a, K, N, S, R>
 where
-    N: Clone,
     K: Hash,
     S: BuildHasher,
 {

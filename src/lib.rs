@@ -104,6 +104,10 @@ where
 
         Some((hash, NodeRef::new(inner, token)))
     }
+
+    pub fn iter(&self) -> Iter<'_, K, N, S, R> {
+        self.into_iter()
+    }
 }
 
 impl<K, N, S, const R: usize> ConsistentHash<K, N, S, R>
@@ -178,10 +182,6 @@ where
 
         Some((hash, inner[token].clone()))
     }
-
-    pub fn iter(&self) -> Iter<'_, K, N, S, R> {
-        self.into_iter()
-    }
 }
 
 impl<K, V, S: Default, const R: usize> Default for ConsistentHash<K, V, S, R> {
@@ -192,7 +192,6 @@ impl<K, V, S: Default, const R: usize> Default for ConsistentHash<K, V, S, R> {
 
 impl<'a, K, N, S, const R: usize> IntoIterator for &'a ConsistentHash<K, N, S, R>
 where
-    N: Clone,
     K: Hash,
     S: BuildHasher,
 {
