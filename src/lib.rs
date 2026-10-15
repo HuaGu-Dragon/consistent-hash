@@ -91,13 +91,6 @@ where
         Some(NodeRef::new(inner, token))
     }
 
-    pub(crate) fn search_nearest_forward(&self, hash: u64) -> Option<(u64, NodeRef<N>)> {
-        let inner = self.inner.load_full();
-        let &(hash, token) = inner.nearest_forward_node_index(hash)?;
-
-        Some((hash, NodeRef::new(inner, token)))
-    }
-
     pub fn search_nearest(&self, hash: u64) -> Option<(u64, NodeRef<N>)> {
         let inner = self.inner.load_full();
         let &(hash, token) = inner.nearest_node_index(hash)?;
@@ -105,7 +98,7 @@ where
         Some((hash, NodeRef::new(inner, token)))
     }
 
-    pub fn iter(&self) -> Iter<'_, K, N, S, R> {
+    pub fn iter(&self) -> Iter<N> {
         self.into_iter()
     }
 }
@@ -190,21 +183,17 @@ impl<K, V, S: Default, const R: usize> Default for ConsistentHash<K, V, S, R> {
     }
 }
 
-impl<'a, K, N, S, const R: usize> IntoIterator for &'a ConsistentHash<K, N, S, R>
+impl<K, N, S, const R: usize> IntoIterator for &ConsistentHash<K, N, S, R>
 where
     K: Hash,
     S: BuildHasher,
 {
     type Item = NodeRef<N>;
 
-    type IntoIter = Iter<'a, K, N, S, R>;
+    type IntoIter = Iter<N>;
 
     fn into_iter(self) -> Self::IntoIter {
-        Iter {
-            inner: self,
-            head: 0,
-            tail: u64::MAX,
-        }
+        Iter::new(self.inner.load_full())
     }
 }
 
@@ -255,19 +244,9 @@ mod tests {
             Some((1, 1))
         );
         assert_eq!(
-            ring.search_nearest_forward(0)
-                .map(|(hash, node_ref)| (hash, *node_ref)),
-            Some((100, 100))
-        );
-        assert_eq!(
             ring.search_nearest(50)
                 .map(|(hash, node_ref)| (hash, *node_ref)),
             Some((50, 50))
-        );
-        assert_eq!(
-            ring.search_nearest_forward(50)
-                .map(|(hash, node_ref)| (hash, *node_ref)),
-            Some((1, 1))
         );
         assert_eq!(
             ring.search_nearest(100)
@@ -275,29 +254,14 @@ mod tests {
             Some((100, 100))
         );
         assert_eq!(
-            ring.search_nearest_forward(100)
-                .map(|(hash, node_ref)| (hash, *node_ref)),
-            Some((50, 50))
-        );
-        assert_eq!(
             ring.search_nearest(80)
                 .map(|(hash, node_ref)| (hash, *node_ref)),
             Some((100, 100))
         );
         assert_eq!(
-            ring.search_nearest_forward(80)
-                .map(|(hash, node_ref)| (hash, *node_ref)),
-            Some((50, 50))
-        );
-        assert_eq!(
             ring.search_nearest(150)
                 .map(|(hash, node_ref)| (hash, *node_ref)),
             Some((1, 1))
-        );
-        assert_eq!(
-            ring.search_nearest_forward(150)
-                .map(|(hash, node_ref)| (hash, *node_ref)),
-            Some((100, 100))
         );
     }
 

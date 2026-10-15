@@ -1,44 +1,49 @@
-use std::hash::{BuildHasher, Hash};
+use std::sync::Arc;
 
-use crate::{ConsistentHash, snapshot::NodeRef};
+use crate::{inner::Inner, snapshot::NodeRef};
 
-pub struct Iter<'a, K, N, S, const R: usize> {
-    pub(crate) inner: &'a ConsistentHash<K, N, S, R>,
-    pub(crate) head: u64,
-    pub(crate) tail: u64,
+pub struct Iter<N> {
+    snapshot: Arc<Inner<N>>,
+    front: usize,
+    back: usize,
 }
 
-impl<'a, K, N, S, const R: usize> Iterator for Iter<'a, K, N, S, R>
-where
-    K: Hash,
-    S: BuildHasher,
-{
-    type Item = NodeRef<N>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (hash, node) = self.inner.search_nearest(self.head)?;
-        if hash < self.head || hash > self.tail {
-            return None;
+impl<N> Iter<N> {
+    pub(crate) fn new(snapshot: Arc<Inner<N>>) -> Self {
+        let back = snapshot.ring.len();
+        Self {
+            snapshot,
+            front: 0,
+            back,
         }
-        self.head = hash + 1;
-
-        Some(node)
     }
 }
 
-impl<'a, K, N, S, const R: usize> DoubleEndedIterator for Iter<'a, K, N, S, R>
-where
-    K: Hash,
-    S: BuildHasher,
-{
-    fn next_back(&mut self) -> Option<Self::Item> {
-        let (hash, node) = self.inner.search_nearest_forward(self.tail)?;
-        if hash > self.tail || hash < self.head {
+impl<N> Iterator for Iter<N> {
+    type Item = NodeRef<N>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.front >= self.back {
             return None;
         }
-        self.tail = hash - 1;
 
-        Some(node)
+        let &(_, token) = &self.snapshot.ring[self.front];
+        self.front += 1;
+
+        Some(NodeRef::new(Arc::clone(&self.snapshot), token))
+    }
+}
+
+impl<N> DoubleEndedIterator for Iter<N> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.front >= self.back {
+            return None;
+        }
+
+        self.back -= 1;
+        let &(_, token) = &self.snapshot.ring[self.back];
+
+        Some(NodeRef::new(Arc::clone(&self.snapshot), token))
     }
 }
 
