@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{iter::FusedIterator, sync::Arc};
 
 use crate::{inner::Inner, snapshot::NodeRef};
 
@@ -32,6 +32,11 @@ impl<N> Iterator for Iter<N> {
 
         Some(NodeRef::new(Arc::clone(&self.snapshot), token))
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.back - self.front;
+        (remaining, Some(remaining))
+    }
 }
 
 impl<N> DoubleEndedIterator for Iter<N> {
@@ -46,6 +51,9 @@ impl<N> DoubleEndedIterator for Iter<N> {
         Some(NodeRef::new(Arc::clone(&self.snapshot), token))
     }
 }
+
+impl<N> ExactSizeIterator for Iter<N> {}
+impl<N> FusedIterator for Iter<N> {}
 
 #[cfg(test)]
 mod tests {
