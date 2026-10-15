@@ -46,6 +46,10 @@ impl<K, N, S, const R: usize> ConsistentHash<K, N, S, R> {
     pub fn nodes_len(&self) -> usize {
         self.inner.load().nodes_len()
     }
+
+    pub fn iter(&self) -> Iter<N> {
+        self.into_iter()
+    }
 }
 
 impl<K, N, S, const R: usize> ConsistentHash<K, N, S, R>
@@ -96,10 +100,6 @@ where
         let &(hash, token) = inner.nearest_node_index(hash)?;
 
         Some((hash, NodeRef::new(inner, token)))
-    }
-
-    pub fn iter(&self) -> Iter<N> {
-        self.into_iter()
     }
 }
 
@@ -183,11 +183,7 @@ impl<K, V, S: Default, const R: usize> Default for ConsistentHash<K, V, S, R> {
     }
 }
 
-impl<K, N, S, const R: usize> IntoIterator for &ConsistentHash<K, N, S, R>
-where
-    K: Hash,
-    S: BuildHasher,
-{
+impl<K, N, S, const R: usize> IntoIterator for &ConsistentHash<K, N, S, R> {
     type Item = NodeRef<N>;
 
     type IntoIter = Iter<N>;
