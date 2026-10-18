@@ -1,6 +1,6 @@
 use std::{ops::Deref, ptr::NonNull, sync::Arc};
 
-use crate::inner::Inner;
+use crate::inner::{Inner, Token};
 
 #[derive(Clone)]
 pub struct NodeRef<N> {
@@ -21,7 +21,7 @@ impl<N> Deref for NodeRef<N> {
 }
 
 impl<N> NodeRef<N> {
-    pub(crate) fn new(snapshot: Arc<Inner<N>>, token: usize) -> Self {
+    pub(crate) fn new(snapshot: Arc<Inner<N>>, token: Token) -> Self {
         let node = unsafe { NonNull::new_unchecked(&raw const snapshot[token] as *mut _) };
 
         Self {

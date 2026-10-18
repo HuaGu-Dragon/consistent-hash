@@ -10,7 +10,7 @@ pub struct Iter<N> {
 
 impl<N> Iter<N> {
     pub(crate) fn new(snapshot: Arc<Inner<N>>) -> Self {
-        let back = snapshot.ring.len();
+        let back = snapshot.virtual_nodes_len();
         Self {
             snapshot,
             front: 0,
@@ -27,7 +27,7 @@ impl<N> Iterator for Iter<N> {
             return None;
         }
 
-        let &(_, token) = &self.snapshot.ring[self.front];
+        let &(_, token) = &self.snapshot[self.front];
         self.front += 1;
 
         Some(NodeRef::new(Arc::clone(&self.snapshot), token))
@@ -46,7 +46,7 @@ impl<N> DoubleEndedIterator for Iter<N> {
         }
 
         self.back -= 1;
-        let &(_, token) = &self.snapshot.ring[self.back];
+        let &(_, token) = &self.snapshot[self.back];
 
         Some(NodeRef::new(Arc::clone(&self.snapshot), token))
     }

@@ -4,9 +4,13 @@ use slab::Slab;
 
 use crate::error;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct Token(usize);
+
 #[derive(Clone)]
 pub(crate) struct Inner<N> {
-    pub(crate) ring: Box<[(u64, usize)]>,
+    ring: Box<[(u64, Token)]>,
     nodes: Slab<N>,
 }
 
@@ -50,13 +54,13 @@ impl<N> Inner<N> {
         h == hashes.len()
     }
 
-    pub(crate) fn get_node(&self, hash: u64) -> Option<&(u64, usize)> {
+    pub(crate) fn get_node(&self, hash: u64) -> Option<&(u64, Token)> {
         let idx = self.ring.binary_search_by_key(&hash, |bin| bin.0).ok()?;
 
         self.ring.get(idx)
     }
 
-    pub(crate) fn nearest_node_index(&self, hash: u64) -> Option<&(u64, usize)> {
+    pub(crate) fn nearest_node_index(&self, hash: u64) -> Option<&(u64, Token)> {
         let idx = match self.ring.binary_search_by_key(&hash, |bin| bin.0) {
             Err(n) if n == self.ring.len() => 0,
             Ok(n) | Err(n) => n,
@@ -86,12 +90,12 @@ where
         mut self,
         hashes: &[u64],
         node: N,
-    ) -> Result<(Self, usize), error::Error<N>> {
+    ) -> Result<(Self, Token), error::Error<N>> {
         if let Some(hash) = self.contains_keys(hashes) {
             return Err(error::Error::AlreadyExists(hash, node));
         }
 
-        let token = self.nodes.insert(node);
+        let token = Token(self.nodes.insert(node));
 
         let mut ring = self.ring.into_vec();
         ring.extend(hashes.iter().copied().zip(std::iter::repeat(token)));
@@ -128,7 +132,7 @@ where
 
         let node = self
             .nodes
-            .remove(token.expect("there must have at least one node"));
+            .remove(token.expect("there must have at least one node").0);
 
         Some((
             Self {
@@ -140,19 +144,27 @@ where
     }
 }
 
+impl<N> Index<usize> for Inner<N> {
+    type Output = (u64, Token);
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.ring[index]
+    }
+}
+
+impl<N> Index<Token> for Inner<N> {
+    type Output = N;
+
+    fn index(&self, index: Token) -> &Self::Output {
+        &self.nodes[index.0]
+    }
+}
+
 impl<N> Default for Inner<N> {
     fn default() -> Self {
         Self {
             ring: Default::default(),
             nodes: Default::default(),
         }
-    }
-}
-
-impl<N> Index<usize> for Inner<N> {
-    type Output = N;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        self.nodes.index(index)
     }
 }
