@@ -8,7 +8,7 @@ use crate::error;
 #[repr(transparent)]
 pub struct Token(usize);
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct Inner<N> {
     ring: Box<[(u64, Token)]>,
     nodes: Slab<N>,

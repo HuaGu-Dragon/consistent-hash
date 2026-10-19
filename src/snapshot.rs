@@ -2,7 +2,7 @@ use std::{ops::Deref, ptr::NonNull, sync::Arc};
 
 use crate::inner::{Inner, Token};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct NodeRef<N> {
     _snapshot: Arc<Inner<N>>,
     node: NonNull<N>,

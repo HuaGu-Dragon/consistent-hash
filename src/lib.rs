@@ -16,6 +16,7 @@ mod inner;
 mod iter;
 mod snapshot;
 
+#[derive(Debug)]
 pub struct ConsistentHash<K, N, S = BuildHasherDefault<SipHasher13>, const R: usize = 4> {
     build_hash: S,
     inner: ArcSwap<Inner<N>>,
