@@ -5,5 +5,9 @@ edition = "2024"
 
 [dependencies]
 arc-swap = "1.9.2"
+serde = { version = "1.0.229", optional = true, features = ["derive"] }
 siphasher = "1.0.3"
 slab = "0.4.12"
+
+[features]
+serde = ["dep:serde", "arc-swap/serde", "slab/serde"]

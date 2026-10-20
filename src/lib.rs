@@ -17,6 +17,7 @@ mod iter;
 mod snapshot;
 
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct ConsistentHash<K, N, S = BuildHasherDefault<SipHasher13>, const R: usize = 4> {
     build_hash: S,
     inner: ArcSwap<Inner<N>>,

@@ -5,10 +5,12 @@ use slab::Slab;
 use crate::error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 #[repr(transparent)]
 pub struct Token(usize);
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub(crate) struct Inner<N> {
     ring: Box<[(u64, Token)]>,
     nodes: Slab<N>,
